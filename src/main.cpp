@@ -5,7 +5,7 @@
 #include "display.h"
 #include "vec2.h"
 
-#define PI 3.14159265
+#define PI 3.14159265358979323846
 
 using stclock = std::chrono::steady_clock;
 
@@ -15,13 +15,14 @@ struct Particle
 	vec2<float> vel;
 	vec2<float> accel;
 	float density = 0.0;
+	vec2<float> prevPos;
 };
 
 float gravity = 25.0f;
 float p_radius = 4.0f;
 float mass = 100.0f;
 float bounceStiffness = -0.5f;
-float s_radius = 20.0f;
+float s_radius = 25.0f;
 float viscosityCoeff = 250.0f;
 
 int window_width = 800;
@@ -43,22 +44,26 @@ void boundsCheck(Particle& particle)
 	if (particle.pos.y > window_height - p_radius) 
 	{
 		particle.pos.y = window_height - p_radius;
-		particle.vel.y = particle.vel.y * bounceStiffness;
+		float vy = particle.pos.y - particle.prevPos.y;
+		particle.prevPos.y = particle.pos.y + vy * bounceStiffness;
 	}
 	if (particle.pos.y < p_radius) 
 	{
 		particle.pos.y = p_radius;
-		particle.vel.y = particle.vel.y * bounceStiffness;
+		float vy = particle.pos.y - particle.prevPos.y;
+		particle.prevPos.y = particle.pos.y + vy * bounceStiffness;
 	}
 	if (particle.pos.x > window_width - p_radius) 
 	{
 		particle.pos.x = window_width - p_radius;
-		particle.vel.x = particle.vel.x * bounceStiffness;
+		float vx = particle.pos.x - particle.prevPos.x;
+		particle.prevPos.x = particle.pos.x + vx * bounceStiffness;
 	}
 	if (particle.pos.x < p_radius) 
 	{
 		particle.pos.x = p_radius;
-		particle.vel.x = particle.vel.x * bounceStiffness;
+		float vx = particle.pos.x - particle.prevPos.x;
+		particle.prevPos.x = particle.pos.x + vx * bounceStiffness;
 	}
 }
 
@@ -180,15 +185,22 @@ void update(double delta)
 		p.accel = vec2<float>(0.0f, 0.0f);
 		p.accel += getPressureForce(p);
 		p.accel += getViscosityForce(p);
-		p.accel.y += gravity;
+		//p.accel.y += gravity;
 	}
 	
 	for (auto& p : particles) 
 	{	
-		p.vel += p.accel * delta;
-		p.pos += p.vel * delta;
+		vec2<float> prev = p.pos;
+		
+		vec2<float> velocity = (p.pos - p.prevPos) * 0.999f;
+		
+		p.pos += velocity + p.accel * delta * delta;
+		p.prevPos = prev;
 		
 		boundsCheck(p);
+		
+		p.vel = (p.pos - p.prevPos) / delta;
+		
 		display.drawParticle(p.pos.x, p.pos.y, p_radius);
 	}
 
@@ -207,8 +219,12 @@ int main()
 		for (int j = 0; j < gridHeight; j++) 
 		{
 			int idx = j * gridWidth + i;
-			particles[idx].pos.x = (window_width  - 9 * spacing) / 2.0f + i * spacing;
-			particles[idx].pos.y = (window_height  - 9 * spacing) / 2.0f + j * spacing;
+			float x = window_width / 2.0f - (gridWidth / 2.0f * spacing) + spacing * i;
+			float y = window_height / 2.0f - (gridHeight / 2.0f * spacing) + spacing * j;
+			particles[idx].pos.x = x;
+			particles[idx].pos.y = y;
+			particles[idx].prevPos.x = x;
+			particles[idx].prevPos.y = y;
 		}
 	}
 	
@@ -220,7 +236,7 @@ int main()
 		double delta = std::chrono::duration<double>(current - previous).count();
 		previous = current;
 
-		delta = std::min(delta, 0.05);
+		delta = std::min(delta, 0.1);
 		
 		while (SDL_PollEvent(&event))
 		{
@@ -229,8 +245,7 @@ int main()
 		}
 		
 		update(delta);
-		printf("%.2f\n", (float)(1.0f / delta));
-		//printf("%f\n", particles[0].density);
+		printf("%.2f\n", (1.0f / delta));
 	}
 	SDL_Quit();
 	return 0;
