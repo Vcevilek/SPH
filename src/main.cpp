@@ -2,6 +2,7 @@
 #include <SDL2/SDL.h>
 #include <iostream>
 #include <chrono>
+#include <unordered_map>
 #include "display.h"
 #include "vec2.h"
 
@@ -18,8 +19,8 @@ struct Particle
 	vec2<float> prevPos;
 };
 
-float gravity = 25.0f;
-float p_radius = 4.0f;
+float gravity = 10.0f;
+float p_radius = 3.0f;
 float mass = 100.0f;
 float bounceStiffness = -0.5f;
 float s_radius = 25.0f;
@@ -28,14 +29,18 @@ float viscosityCoeff = 250.0f;
 int window_width = 800;
 int window_height = 600;
 
-float pressureConst = 10000.0f;
-float targetDensity = 0.5f;
+float pressureConst = 2000.0f;
+float targetDensity = 0.25f;
 
 const int spacing = 10;
-const int gridWidth = 30;
-const int gridHeight = 30;
+const int gridWidth = 40;
+const int gridHeight = 40;
+
+const int prime1 = 1014183103;
+const int prime2 = 2007549391;
 
 Particle particles[gridWidth * gridHeight];
+std::unordered_map<size_t, std::vector<int>> hashMap;
 
 Display display(window_width, window_height);
 
@@ -94,20 +99,38 @@ float viscosityKernel(float r, float h)
 	return (40.0f / (PI * pow(h, 5))) * (h - r);
 }
 
-float getDensity(float x, float y, float smoothRadius)
+float getDensity(Particle& particle, float smoothRadius)
 {
 	float density = 0.0f;
 	
-	for (auto& p : particles) 
-	{
-		float dx = p.pos.x - x;
-		float dy = p.pos.y - y;
-		float r = std::sqrt(dx * dx + dy * dy);
-		if (r > smoothRadius) continue;
-		
-		density += mass * pressureKernel(r, smoothRadius);
-	}
+	int cellX = floor(particle.pos.x / s_radius);
+	int cellY = floor(particle.pos.y / s_radius);
 	
+	for (int dx = -1; dx <= 1; dx++) 
+	{
+		for (int dy = -1; dy <= 1; dy++) 
+		{
+			int neighborX = cellX + dx;
+			int neighborY = cellY + dy;
+			size_t hash = (neighborX * prime1) ^ (neighborY * prime2);
+			
+			auto it = hashMap.find(hash);
+			if (it != hashMap.end()) 
+			{
+				for (int idx : it->second) 
+				{
+					auto& p = particles[idx];
+					if (&p == &particle) continue;
+					float diffX = p.pos.x - particle.pos.x;
+					float diffY = p.pos.y - particle.pos.y;
+					float r = std::sqrt(diffX * diffX + diffY * diffY);
+					if (r > smoothRadius) continue;
+		
+					density += mass * pressureKernel(r, smoothRadius);
+				}
+			}
+		}
+	}
 	return density;
 }
 
@@ -123,27 +146,44 @@ vec2<float> getPressureForce(Particle& particle)
 	float pressure1 = getPressure(particle.density);
 	float dens1 = std::max(particle.density, 0.0001f);
 	
-	for (auto& p : particles)
+	int cellX = floor(particle.pos.x / s_radius);
+	int cellY = floor(particle.pos.y / s_radius);
+	
+	for (int dx = -1; dx <= 1; dx++) 
 	{
-		if (&p == &particle) continue;
-
-		vec2<float> rij = 
+		for (int dy = -1; dy <= 1; dy++) 
 		{
-			particle.pos.x - p.pos.x,
-			particle.pos.y - p.pos.y
-		};
+			int neighborX = cellX + dx;
+			int neighborY = cellY + dy;
+			size_t hash = (neighborX * prime1) ^ (neighborY * prime2);
+			
+			auto it = hashMap.find(hash);
+			if (it != hashMap.end()) 
+			{
+				for (int idx : it->second) 
+				{
+					auto& p = particles[idx];
+					if (&p == &particle) continue;
+					vec2<float> rij = 
+					{
+						particle.pos.x - p.pos.x,
+						particle.pos.y - p.pos.y
+					};
 		
-		float r = rij.length();
+					float r = rij.length();
 		
-		if (r > s_radius || r <= 0.0f) continue;
+					if (r > s_radius || r <= 0.0f) continue;
 		
-		float pressure2 = getPressure(p.density);
-		float dens2 = std::max(p.density, 0.0001f);
+					float pressure2 = getPressure(p.density);
+					float dens2 = std::max(p.density, 0.0001f);
 		
-		float scalar = -mass * (pressure1/(dens1*dens1) + pressure2/(dens2*dens2));
-		vec2<float> gradW = pressureGradient(rij, s_radius);
+					float scalar = -mass * (pressure1/(dens1*dens1) + pressure2/(dens2*dens2));
+					vec2<float> gradW = pressureGradient(rij, s_radius);
 		
-		pressureForce += gradW * scalar;
+					pressureForce += gradW * scalar;
+				}
+			}
+		}
 	}
 	return pressureForce;
 }
@@ -152,21 +192,40 @@ vec2<float> getViscosityForce(Particle& particle)
 {
 	vec2<float> viscForce;
 	
-	for (auto& p : particles) 
+	int cellX = floor(particle.pos.x / s_radius);
+	int cellY = floor(particle.pos.y / s_radius);
+	
+	for (int dx = -1; dx <= 1; dx++) 
 	{
-		if (&p == &particle) continue;
+		for (int dy = -1; dy <= 1; dy++) 
+		{
+			int neighborX = cellX + dx;
+			int neighborY = cellY + dy;
+			size_t hash = (neighborX * prime1) ^ (neighborY * prime2);
+			
+			auto it = hashMap.find(hash);
+			if (it != hashMap.end()) 
+			{
+				for (int idx : it->second) 
+				{
+					auto& p = particles[idx];
+					if (&p == &particle) continue;
 		
-		vec2<float> rij = p.pos - particle.pos;
-		float r = rij.length();
-		if (r > s_radius || r <= 0.0f) continue;
+					vec2<float> rij = p.pos - particle.pos;
+					float r = rij.length();
+					if (r > s_radius || r <= 0.0f) continue;
 		
-		vec2<float> velDiff = p.vel - particle.vel;
-		float laplacian = viscosityKernel(r, s_radius);
+					vec2<float> velDiff = p.vel - particle.vel;
+					float laplacian = viscosityKernel(r, s_radius);
 		
-		float scalar = (mass / std::max(p.density, 0.0001f)) * laplacian * viscosityCoeff;
+					float scalar = (mass / std::max(p.density, 0.0001f)) * laplacian * viscosityCoeff;
 		
-		viscForce += velDiff * scalar;
+					viscForce += velDiff * scalar;
+				}
+			}
+		}
 	}
+
 	return viscForce;
 }
 
@@ -174,18 +233,36 @@ void update(double delta)
 {
 	display.clearWindow();
 	
+	hashMap.clear();
+	
+	for (int i = 0; i < gridHeight * gridWidth; i++) 
+	{
+		auto &p = particles[i];
+		int cellX = floor(p.pos.x / s_radius);
+		int cellY = floor(p.pos.y / s_radius);
+		size_t hash = (cellX * prime1) ^ (cellY * prime2);
+		hashMap[hash].push_back(i);
+	}
+	
 	for (auto& p : particles) 
 	{
-		p.density = getDensity(p.pos.x, p.pos.y, s_radius);
-
+		p.density = getDensity(p, s_radius);
 	}
 	
 	for (auto& p : particles) 
 	{	
 		p.accel = vec2<float>(0.0f, 0.0f);
-		p.accel += getPressureForce(p);
-		p.accel += getViscosityForce(p);
-		//p.accel.y += gravity;
+		
+		float maxForce = 1000.0f;
+		vec2<float> pf = getPressureForce(p);
+		if (pf.length() > maxForce) pf = pf.normalize() * maxForce;
+		p.accel += pf;
+		
+		vec2<float> vf = getViscosityForce(p);
+		if (vf.length() > maxForce) vf = vf.normalize() * maxForce;
+		p.accel += vf;
+		
+		p.accel.y += gravity;
 	}
 	
 	for (auto& p : particles) 
@@ -214,6 +291,8 @@ int main()
 	int quit = 0;
 	SDL_Event event;
 	
+	hashMap.reserve(gridWidth * gridHeight);
+	
 	for (int i = 0; i < gridWidth; i++) 
 	{
 		for (int j = 0; j < gridHeight; j++) 
@@ -227,7 +306,7 @@ int main()
 			particles[idx].prevPos.y = y;
 		}
 	}
-	
+
 	while(!quit) 
 	{
 		display.getWindowSize(&window_width, &window_height);
