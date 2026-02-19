@@ -19,7 +19,7 @@ struct Particle
 	vec2<float> prevPos;
 };
 
-float gravity = 10.0f;
+float gravity = 15.0f;
 float p_radius = 3.0f;
 float mass = 100.0f;
 float bounceStiffness = -0.5f;
@@ -81,12 +81,11 @@ float pressureKernel(float r, float h)
 	return (4.0f / (PI * pow(h, 8))) * a*a*a;
 }
 
-vec2<float> pressureGradient(vec2<float> rij, float h) 
+vec2<float> pressureGradient(vec2<float>& rij, float r2, float h) 
 {
-	float r = rij.length();
+	if (r2 <= 0.0001f || r2 > h*h) return vec2<float>(0.0f, 0.0f);
 	
-	if (r <= 0.0001f || r > h) return vec2<float>(0.0f, 0.0f);
-	
+	float r = std::sqrt(r2);
 	vec2<float> dir = rij / r;
 	float derivative = -(30.0f / (PI * pow(h, 5))) * pow(h - r, 2);
 	
@@ -102,6 +101,7 @@ float viscosityKernel(float r, float h)
 float getDensity(Particle& particle, float smoothRadius)
 {
 	float density = 0.0f;
+	float h2 = smoothRadius * smoothRadius;
 	
 	int cellX = floor(particle.pos.x / s_radius);
 	int cellY = floor(particle.pos.y / s_radius);
@@ -123,10 +123,10 @@ float getDensity(Particle& particle, float smoothRadius)
 					if (&p == &particle) continue;
 					float diffX = p.pos.x - particle.pos.x;
 					float diffY = p.pos.y - particle.pos.y;
-					float r = std::sqrt(diffX * diffX + diffY * diffY);
-					if (r > smoothRadius) continue;
+					float r2 = diffX * diffX + diffY * diffY;
+					if (r2 > h2) continue;
 		
-					density += mass * pressureKernel(r, smoothRadius);
+					density += mass * pressureKernel(std::sqrt(r2), smoothRadius);
 				}
 			}
 		}
@@ -164,21 +164,18 @@ vec2<float> getPressureForce(Particle& particle)
 				{
 					auto& p = particles[idx];
 					if (&p == &particle) continue;
-					vec2<float> rij = 
-					{
-						particle.pos.x - p.pos.x,
-						particle.pos.y - p.pos.y
-					};
+					
+					vec2<float> rij = particle.pos - p.pos;
 		
-					float r = rij.length();
-		
-					if (r > s_radius || r <= 0.0f) continue;
-		
+					float r2 = rij.x*rij.x + rij.y*rij.y;
+					float h2 = s_radius * s_radius;
+					if (r2 > h2 || r2 <= 0.0001f) continue;
+					
 					float pressure2 = getPressure(p.density);
 					float dens2 = std::max(p.density, 0.0001f);
 		
 					float scalar = -mass * (pressure1/(dens1*dens1) + pressure2/(dens2*dens2));
-					vec2<float> gradW = pressureGradient(rij, s_radius);
+					vec2<float> gradW = pressureGradient(rij, r2, s_radius);
 		
 					pressureForce += gradW * scalar;
 				}
@@ -212,9 +209,12 @@ vec2<float> getViscosityForce(Particle& particle)
 					if (&p == &particle) continue;
 		
 					vec2<float> rij = p.pos - particle.pos;
-					float r = rij.length();
-					if (r > s_radius || r <= 0.0f) continue;
+					float r2 = rij.x*rij.x + rij.y*rij.y;
+					float h2 = s_radius * s_radius;
+					if (r2 > h2 || r2 <= 0.0f) continue;
 		
+					float r = std::sqrt(r2);
+					
 					vec2<float> velDiff = p.vel - particle.vel;
 					float laplacian = viscosityKernel(r, s_radius);
 		
