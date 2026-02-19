@@ -19,9 +19,9 @@ struct Particle
 float gravity = 25.0f;
 float p_radius = 4.0f;
 float mass = 100.0f;
-float bounceStiffness = -0.8f;
+float bounceStiffness = -0.5f;
 float s_radius = 20.0f;
-float viscosityCoeff = 10.0f;
+float viscosityCoeff = 250.0f;
 
 int window_width = 800;
 int window_height = 600;
@@ -30,8 +30,8 @@ float pressureConst = 10000.0f;
 float targetDensity = 0.5f;
 
 const int spacing = 10;
-const int gridWidth = 20;
-const int gridHeight = 20;
+const int gridWidth = 30;
+const int gridHeight = 30;
 
 Particle particles[gridWidth * gridHeight];
 
