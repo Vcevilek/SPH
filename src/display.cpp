@@ -23,9 +23,9 @@ void Display::clearWindow()
 	SDL_RenderClear(renderer);
 }
 
-void Display::drawParticle(int x, int y, float radius) 
+void Display::drawParticle(int x, int y, float radius, SDL_Color color)
 {
-	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+	SDL_SetRenderDrawColor(renderer, color.r, color.b, color.g, color.a);
 	for (int w = -radius; w <= radius; w++) {
 		for (int h = -radius; h <= radius; h++) {
 			if (w*w + h*h <= radius*radius)

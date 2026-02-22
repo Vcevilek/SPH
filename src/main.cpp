@@ -19,22 +19,24 @@ struct Particle
 	vec2<float> prevPos;
 };
 
-float gravity = 15.0f;
-float p_radius = 3.0f;
-float mass = 100.0f;
-float bounceStiffness = -0.5f;
+float gravity = 750.0f;
+float p_radius = 2.0f;
+float mass = 50.0f;
+float bounceStiffness = -0.25f;
 float s_radius = 25.0f;
-float viscosityCoeff = 250.0f;
+float viscosityCoeff = 75.0f;
+
+bool gravityEnabled = true;
 
 int window_width = 800;
 int window_height = 600;
 
-float pressureConst = 2000.0f;
-float targetDensity = 0.25f;
+float pressureConst = 51200.0f;
+float targetDensity = 0.15f;
 
 const int spacing = 10;
-const int gridWidth = 40;
-const int gridHeight = 40;
+const int gridWidth = 50;
+const int gridHeight = 50;
 
 const int prime1 = 1014183103;
 const int prime2 = 2007549391;
@@ -253,7 +255,7 @@ void update(double delta)
 	{	
 		p.accel = vec2<float>(0.0f, 0.0f);
 		
-		float maxForce = 1000.0f;
+		float maxForce = 10000.0f;
 		vec2<float> pf = getPressureForce(p);
 		if (pf.length() > maxForce) pf = pf.normalize() * maxForce;
 		p.accel += pf;
@@ -262,14 +264,14 @@ void update(double delta)
 		if (vf.length() > maxForce) vf = vf.normalize() * maxForce;
 		p.accel += vf;
 		
-		p.accel.y += gravity;
+		if (gravityEnabled) p.accel.y += gravity;
 	}
 	
 	for (auto& p : particles) 
 	{	
 		vec2<float> prev = p.pos;
 		
-		vec2<float> velocity = (p.pos - p.prevPos) * 0.999f;
+		vec2<float> velocity = (p.pos - p.prevPos) * 0.99f;
 		
 		p.pos += velocity + p.accel * delta * delta;
 		p.prevPos = prev;
@@ -278,7 +280,8 @@ void update(double delta)
 		
 		p.vel = (p.pos - p.prevPos) / delta;
 		
-		display.drawParticle(p.pos.x, p.pos.y, p_radius);
+		SDL_Color particleColor = {255, 255, 255, 255};
+		display.drawParticle(p.pos.x, p.pos.y, p_radius, particleColor);
 	}
 
 	display.draw();
